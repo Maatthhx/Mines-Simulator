@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Campo Minado Treinos</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+  <style>
+    body {
+      background-color: #077dce;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: white;
+      font-family: 'Roboto', sans-serif;
+    }
+    .board {
+      display: none;
+      grid-template-columns: repeat(5, 88px);
+      gap: 8px;
+      margin-top: 30px;
+    }
+    .cell {
+      width: 88px;
+      height: 61px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 34px;
+      cursor: pointer;
+      border-radius: 10px;
+      background-color: #075a90;
+      border: 4px solid #065284;
+      box-sizing: border-box;
+      box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    }
+    .revealed {
+      background-color: #075a90;
+      transition: background-color 1s;
+    }
+    .revealed.star {
+      background-color: #f6941b;
+      border-color: #ea990e;
+    }
+    .revealed.star i {
+      color: white;
+      text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.5);
+    }
+    .revealed.mine {
+      background-color: #075a90;
+      transition: background-color 1s;
+    }
+    .revealed.mine.explosion {
+      background-color: #ff7676;
+      border-color: #a92f56;
+      transition: background-color 0.5s;
+    }
+    .revealed.mine.explosion i {
+      color: #a92f56;
+    }
+    .revealed.mine i {
+      color: #242932;
+    }
+    #bomb-count {
+      border-radius: 4px;
+      padding: 4px;
+      outline: none;
+      -moz-appearance: textfield;
+      -webkit-appearance: textfield;
+      appearance: textfield;
+    }
+    #bomb-count::-webkit-outer-spin-button,
+    #bomb-count::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    #setup {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #loss-message {
+      color: #751c1c;
+      font-size: 20px;
+      margin-top: 10px;
+      display: none;
+    }
+    #start-button {
+      border-radius: 10px;
+      background-color: #075a90;
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .balance {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 20px;
+    }
+    .balance-label {
+      font-size: 20px;
+    }
+    .balance-value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <h1>Campo Minado</h1>
+    <div id="setup">
+      <label for="bomb-count">Número de Bombas:</label>
+      <input type="number" id="bomb-count" min="1" max="24" value="5">
+      <button id="start-button">Iniciar Jogo</button>
+    </div>
+    <div id="loss-message">Você perdeu!</div>
+    <div class="board"></div>
+    <div class="balance">
+      <label class="balance-label">Saldo:</label>
+      <span class="balance-value">R$ 500</span>
+      <i class="fas fa-wallet"></i>
+    </div>
+  </div>
+
+  <script>
+    // Configurações do jogo
+    const boardSize = 5;
+    let numMines = 5;
+    let balance = 500;
+
+    // Elementos do jogo
+    const bombCountInput = document.getElementById('bomb-count');
+    const startButton = document.getElementById('start-button');
+    const boardElement = document.querySelector('.board');
+    const lossMessage = document.getElementById('loss-message');
+    const setupContainer = document.getElementById('setup');
+    const balanceValue = document.querySelector('.balance-value');
+
+    // Estado do jogo
+    let gameOver = false;
+
+    // Atualiza o número de bombas de acordo com o input
+    startButton.addEventListener('click', () => {
+      const numMinesInput = parseInt(bombCountInput.value);
+      if (isNaN(numMinesInput) || numMinesInput < 1 || numMinesInput > 24) {
+        alert('Número de bombas inválido. Insira um valor entre 1 e 24.');
+        return;
+      }
+      numMines = numMinesInput;
+      initializeBoard();
+    });
+
+    // Criação do tabuleiro
+    function initializeBoard() {
+      setupContainer.style.display = 'none';
+      lossMessage.style.display = 'none';
+      boardElement.innerHTML = '';
+      const board = [];
+      for (let i = 0; i < boardSize; i++) {
+        board[i] = [];
+        for (let j = 0; j < boardSize; j++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.dataset.row = i;
+          cell.dataset.col = j;
+          board[i][j] = {
+            element: cell,
+            isMine: false,
+            isRevealed: false,
+            numAdjacentMines: 0
+          };
+          boardElement.appendChild(cell);
+        }
+      }
+
+      // Coloca as minas aleatoriamente
+      let placedMines = 0;
+      while (placedMines < numMines) {
+        const row = Math.floor(Math.random() * boardSize);
+        const col = Math.floor(Math.random() * boardSize);
+        if (!board[row][col].isMine) {
+          board[row][col].isMine = true;
+          placedMines++;
+        }
+      }
+
+      // Atualiza o número de minas adjacentes para cada célula
+      for (let i = 0; i < boardSize; i++) {
+        for (let j = 0; j < boardSize; j++) {
+          if (board[i][j].isMine) {
+            continue;
+          }
+          let numMines = 0;
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+              const newRow = i + dx;
+              const newCol = j + dy;
+              if (
+                newRow >= 0 &&
+                newRow < boardSize &&
+                newCol >= 0 &&
+                newCol < boardSize &&
+                board[newRow][newCol].isMine
+              ) {
+                numMines++;
+              }
+            }
+          }
+          board[i][j].numAdjacentMines = numMines;
+        }
+      }
+
+      // Revela uma célula
+      function revealCell(row, col) {
+        const cell = board[row][col];
+        if (cell.isRevealed || gameOver) {
+          return;
+        }
+        cell.isRevealed = true;
+        cell.element.classList.add('revealed');
+        if (cell.isMine) {
+          cell.element.innerHTML = '<i class="fas fa-bomb"></i>';
+          cell.element.style.color = '#242932';
+          cell.element.classList.add('mine');
+          gameOver = true;
+          cell.element.style.boxShadow = '2px 2px 4px rgba(0, 0, 0, 0.5)';
+          setTimeout(() => {
+            cell.element.innerHTML = '<i class="fas fa-bomb"></i>';
+            cell.element.style.color = '#075a90';
+            cell.element.style.borderColor = '#a92f56';
+            cell.element.classList.add('explosion');
+            lossMessage.style.display = 'block';
+            balance = 0;
+            balanceValue.textContent = `R$ ${balance}`;
+          }, 1000);
+          revealAllCells(board);
+        } else {
+          cell.element.innerHTML = '<i class="fas fa-star"></i>';
+          cell.element.classList.add('star');
+          // Aumenta o saldo com base na quantidade de bombas
+          balance += numMines;
+          balanceValue.textContent = `R$ ${balance}`;
+        }
+      }
+
+      // Revela todas as células não reveladas ao final do jogo
+      function revealAllCells(board) {
+        for (let i = 0; i < boardSize; i++) {
+          for (let j = 0; j < boardSize; j++) {
+            const cell = board[i][j];
+            if (!cell.isRevealed) {
+              cell.isRevealed = true;
+              cell.element.classList.add('revealed');
+              if (cell.isMine) {
+                cell.element.innerHTML = '<i class="fas fa-bomb"></i>';
+                cell.element.style.color = '#242932';
+                cell.element.classList.add('mine');
+              } else {
+                cell.element.innerHTML = '<i class="fas fa-star"></i>';
+                cell.element.classList.add('star');
+              }
+            }
+          }
+        }
+      }
+
+      // Event listener para revelar célula ao clicar
+      boardElement.addEventListener('click', (event) => {
+        const cell = event.target;
+        const row = parseInt(cell.dataset.row);
+        const col = parseInt(cell.dataset.col);
+        revealCell(row, col);
+      });
+
+      // Mostra o tabuleiro após inicializar o jogo
+      boardElement.style.display = 'grid';
+    }
+  </script>
+</body>
+</html>
